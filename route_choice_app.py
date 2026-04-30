@@ -6,124 +6,144 @@ import requests
 st.set_page_config(layout="wide")
 
 # ==============================
-# OSRM ROUTE FUNCTION
+# ROUTE FETCH (OSRM)
 # ==============================
 
-def get_route(start, end):
-    url = f"http://router.project-osrm.org/route/v1/driving/{start[1]},{start[0]};{end[1]},{end[0]}?overview=full&geometries=geojson"
+def get_route(points):
+    coords = ";".join([f"{lon},{lat}" for lat, lon in points])
+    url = f"http://router.project-osrm.org/route/v1/driving/{coords}?overview=full&geometries=geojson"
     r = requests.get(url).json()
-    coords = r['routes'][0]['geometry']['coordinates']
-    return [(lat, lon) for lon, lat in coords]
+    route = r['routes'][0]['geometry']['coordinates']
+    return [(lat, lon) for lon, lat in route]
+
+# ==============================
+# ROUTE DEFINITIONS
+# ==============================
+
+start = (28.6139, 77.2090)   # Delhi
+end   = (28.4595, 77.0266)   # Gurgaon
+
+# Route 1 — SPM (more direct)
+route1_points = [
+    start,
+    (28.6000, 77.1800),
+    (28.5700, 77.1400),
+    (28.5200, 77.1000),
+    end
+]
+
+# Route 2 — RTR (more reliable)
+route2_points = [
+    start,
+    (28.6200, 77.2500),
+    (28.5800, 77.2000),
+    (28.5500, 77.1500),
+    (28.5000, 77.1200),
+    end
+]
+
+route1_coords = get_route(route1_points)
+route2_coords = get_route(route2_points)
 
 # ==============================
 # ROUTE DATA
 # ==============================
 
-route1 = {
-    "name": "Route 1 — Sardar Patel Marg",
-    "tt": 49,
-    "bti": 0.70,
-    "signals": 0.60,
-    "circularity": 1.10
-}
-
-route2 = {
-    "name": "Route 2 — Rao Tula Ram Marg",
-    "tt": 52,
-    "bti": 0.45,
-    "signals": 0.40,
-    "circularity": 1.40
-}
+route1 = {"tt": 49, "bti": 0.70, "signals": 0.60, "circularity": 1.10}
+route2 = {"tt": 52, "bti": 0.45, "signals": 0.40, "circularity": 1.40}
 
 # ==============================
-# WEIGHTS FUNCTION (FIXED)
+# WEIGHTS
 # ==============================
 
 def get_weights(user):
 
-    w = {
-        "TT": 0.30,
-        "BTI": 0.40,
-        "Signals": 0.15,
-        "Geometry": 0.15
-    }
+    w = {"TT":0.30, "BTI":0.40, "Signals":0.15, "Geometry":0.15}
 
-    # Delay sensitivity
-    if user['threshold'] == "1–2 min":
-        w["BTI"] += 0.25
-        w["TT"] -= 0.10
-    elif user['threshold'] == "5–10 min":
-        w["BTI"] += 0.10
-    elif user['threshold'] == ">10 min":
-        w["TT"] += 0.20
-        w["BTI"] -= 0.10
+    if user['threshold']=="1–2 min":
+        w["BTI"]+=0.25; w["TT"]-=0.10
+    elif user['threshold']=="5–10 min":
+        w["BTI"]+=0.10
+    elif user['threshold']==">10 min":
+        w["TT"]+=0.20; w["BTI"]-=0.10
 
-    # Buffer
-    if user['buffer'] >= 20:
-        w["BTI"] += 0.20
+    if user['buffer']>=20:
+        w["BTI"]+=0.20
     else:
-        w["TT"] += 0.10
+        w["TT"]+=0.10
 
-    # Peak time
     if user['time'] in ["Morning peak (6–9 AM)", "Evening peak (4–8 PM)"]:
-        w["BTI"] += 0.15
-        w["Signals"] += 0.10
+        w["BTI"]+=0.15; w["Signals"]+=0.10
 
-    # Signals preference
-    if user['signals'] == "Avoid signals":
-        w["Signals"] += 0.20
+    if user['signals']=="Avoid signals":
+        w["Signals"]+=0.20
 
-    # Geometry preference
-    if user['geometry'] == "Prefer straight route":
-        w["Geometry"] += 0.15
+    if user['geometry']=="Prefer straight route":
+        w["Geometry"]+=0.15
 
-    # Normalize
-    total = sum(w.values())
-    for k in w:
-        w[k] /= total
+    total=sum(w.values())
+    for k in w: w[k]/=total
 
     return w
 
 # ==============================
-# SCORING FUNCTION (FIXED)
+# SCORING
 # ==============================
 
 def score(route, w):
 
-    s_tt = (1 / route["tt"]) * 100
-    s_bti = (1 / route["bti"]) * 100
-    s_sig = (1 - route["signals"]) * 100
-    s_geo = (1 / route["circularity"]) * 100
+    s_tt = (1/route["tt"])*100
+    s_bti = (1/route["bti"])*100
+    s_sig = (1-route["signals"])*100
+    s_geo = (1/route["circularity"])*100
 
-    score = (
-        w["TT"] * s_tt +
-        w["BTI"] * s_bti +
-        w["Signals"] * s_sig +
-        w["Geometry"] * s_geo
+    return round(
+        w["TT"]*s_tt +
+        w["BTI"]*s_bti +
+        w["Signals"]*s_sig +
+        w["Geometry"]*s_geo, 2
     )
 
-    return round(score, 2)
+# ==============================
+# WHY EXPLANATION
+# ==============================
+
+def explain(best, w):
+
+    reasons = []
+
+    if w["BTI"] > w["TT"]:
+        reasons.append("You prefer reliable routes (low delay risk)")
+
+    if w["TT"] > w["BTI"]:
+        reasons.append("You prefer faster routes")
+
+    if w["Signals"] > 0.2:
+        reasons.append("You prefer routes with fewer signals")
+
+    if w["Geometry"] > 0.2:
+        reasons.append("You prefer straighter routes")
+
+    return reasons
 
 # ==============================
 # UI
 # ==============================
 
-st.title("🚗 Route Recommendation System")
+st.title("🚗 Smart Route Recommendation System")
 
-col1, col2 = st.columns(2)
+col1, col2 = st.columns([1,2])
 
 with col1:
 
-    commuter = st.selectbox("Commuter type", ["Regular", "Non-regular"])
-
-    purpose = st.selectbox("Trip purpose", ["Work", "Education", "Leisure"])
-
     timeband = st.selectbox("Time of travel",
-        ["Morning peak (6–9 AM)", "Inter-peak (9 AM–4 PM)",
-         "Evening peak (4–8 PM)", "Off-peak / night"]
+        ["Morning peak (6–9 AM)",
+         "Inter-peak (9 AM–4 PM)",
+         "Evening peak (4–8 PM)",
+         "Off-peak / night"]
     )
 
-    threshold = st.selectbox("Delay threshold",
+    threshold = st.selectbox("Delay tolerance",
         ["1–2 min", "5–10 min", ">10 min"]
     )
 
@@ -133,51 +153,59 @@ with col1:
         ["Okay with signals", "Avoid signals"]
     )
 
-    geometry = st.selectbox("Route shape",
+    geometry = st.selectbox("Route preference",
         ["Doesn’t matter", "Prefer straight route"]
     )
 
     if st.button("Find best route"):
 
         user = {
+            "time": timeband,
             "threshold": threshold,
             "buffer": buffer,
-            "time": timeband,
             "signals": signals,
             "geometry": geometry
         }
 
         w = get_weights(user)
 
-        score1 = score(route1, w)
-        score2 = score(route2, w)
+        s1 = score(route1, w)
+        s2 = score(route2, w)
 
-        best = route1 if score1 > score2 else route2
+        best = "R1" if s1 > s2 else "R2"
 
-        st.success(f"✅ Recommended: {best['name']}")
-        st.write("Route 1 Score:", score1)
-        st.write("Route 2 Score:", score2)
+        st.success(f"Recommended: {'Route 1 (SPM)' if best=='R1' else 'Route 2 (RTR)'}")
 
-# ==============================
-# MAP
-# ==============================
+        st.write("Route 1 Score:", s1)
+        st.write("Route 2 Score:", s2)
+
+        # WHY explanation
+        st.subheader("Why this route?")
+        for r in explain(best, w):
+            st.write("•", r)
 
 with col2:
 
-    start = (28.6139, 77.2090)   # Delhi
-    end   = (28.4595, 77.0266)   # Gurgaon
-
-    route1_coords = get_route(start, end)
-
-    waypoint = (28.5672, 77.1170)
-    route2_coords = get_route(start, waypoint) + get_route(waypoint, end)
-
     m = folium.Map(location=start, zoom_start=11)
 
-    folium.PolyLine(route1_coords, color="blue", weight=5).add_to(m)
-    folium.PolyLine(route2_coords, color="orange", weight=5).add_to(m)
+    if 'best' in locals():
+
+        if best=="R1":
+
+            folium.PolyLine(route1_coords, color="blue", weight=7).add_to(m)
+            folium.PolyLine(route2_coords, color="orange", weight=3, opacity=0.4).add_to(m)
+
+        else:
+
+            folium.PolyLine(route2_coords, color="orange", weight=7).add_to(m)
+            folium.PolyLine(route1_coords, color="blue", weight=3, opacity=0.4).add_to(m)
+
+    else:
+
+        folium.PolyLine(route1_coords, color="blue").add_to(m)
+        folium.PolyLine(route2_coords, color="orange").add_to(m)
 
     folium.Marker(start, tooltip="Start").add_to(m)
     folium.Marker(end, tooltip="End").add_to(m)
 
-    st_folium(m, width=700)
+    st_folium(m, width=900)
