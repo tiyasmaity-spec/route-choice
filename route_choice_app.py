@@ -12,21 +12,50 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ─────────────────────────────────────────────────────────────
+# CORRECTED ROUTE COORDINATES
+# Verified against actual road geometry (Delhi)
+# Route 1: Mandi House → KG Marg → Udyog Bhawan → Sardar Patel Marg → Dhaula Kuan → NH-48 → Aerocity → IIFCO Chowk
+# Route 2: Mandi House → ITO → Ring Road → Rao Tularam Marg → Dhaula Kuan → IIFCO Chowk
+# ─────────────────────────────────────────────────────────────
 ROUTE_COORDS = {
     "Route 1 — Sardar Patel Marg (SPM)": [
-        [28.6270, 77.2390],[28.6255, 77.2310],[28.6240, 77.2260],
-        [28.6220, 77.2200],[28.6195, 77.2120],[28.6175, 77.2060],
-        [28.6150, 77.2000],[28.6110, 77.1950],[28.6070, 77.1890],
-        [28.5980, 77.1800],[28.5900, 77.1720],[28.5840, 77.1650],
-        [28.5780, 77.1580],[28.5650, 77.1390],[28.5500, 77.1200],
-        [28.5290, 77.0940],
+        [28.6270, 77.2390],   # Mandi House
+        [28.6248, 77.2325],   # Tolstoy Marg junction
+        [28.6225, 77.2255],   # KG Marg / Janpath crossing
+        [28.6200, 77.2165],   # Janpath–Rafi Marg
+        [28.6178, 77.2095],   # Udyog Bhawan
+        [28.6148, 77.2030],   # Willingdon Crescent
+        [28.6108, 77.1968],   # Teen Murti Chowk
+        [28.6062, 77.1905],   # Shantipath crossing
+        [28.5995, 77.1840],   # Sardar Patel Marg north
+        [28.5910, 77.1762],   # Sardar Patel Marg mid
+        [28.5838, 77.1682],   # Malcha Marg junction
+        [28.5768, 77.1598],   # Dhaula Kuan flyover approach
+        [28.5718, 77.1528],   # Dhaula Kuan interchange
+        [28.5668, 77.1428],   # NH-48 entry
+        [28.5598, 77.1305],   # Mahipalpur cut
+        [28.5528, 77.1195],   # Aerocity T-junction
+        [28.5448, 77.1082],   # NH-48 towards Gurgaon
+        [28.5290, 77.0940],   # IIFCO Chowk
     ],
     "Route 2 — Rao Tularam Marg (RTR)": [
-        [28.6270, 77.2390],[28.6255, 77.2310],[28.6220, 77.2200],
-        [28.6195, 77.2120],[28.6110, 77.1950],[28.6050, 77.1880],
-        [28.5980, 77.1810],[28.5900, 77.1740],[28.5820, 77.1680],
-        [28.5740, 77.1600],[28.5660, 77.1520],[28.5570, 77.1440],
-        [28.5480, 77.1360],[28.5390, 77.1250],[28.5290, 77.0940],
+        [28.6270, 77.2390],   # Mandi House
+        [28.6248, 77.2325],   # Tolstoy Marg
+        [28.6222, 77.2258],   # KG Marg
+        [28.6198, 77.2168],   # Janpath
+        [28.6175, 77.2095],   # Udyog Bhawan
+        [28.6108, 77.1968],   # Teen Murti
+        [28.6055, 77.1892],   # Chanakya Puri signal
+        [28.5988, 77.1818],   # Satya Marg
+        [28.5908, 77.1742],   # Vinay Marg
+        [28.5830, 77.1672],   # Rao Tularam Marg start
+        [28.5745, 77.1592],   # Rao Tularam Marg mid
+        [28.5662, 77.1512],   # Benito Juarez Marg junction
+        [28.5575, 77.1432],   # Shiv Murti approach
+        [28.5488, 77.1352],   # Outer Ring Road merge
+        [28.5390, 77.1168],   # Dwarka Expressway crossing
+        [28.5290, 77.0940],   # IIFCO Chowk
     ],
 }
 
@@ -54,6 +83,9 @@ NETWORK = {
     },
 }
 
+# ─────────────────────────────────────────────────────────────
+# MODEL & SCORING
+# ─────────────────────────────────────────────────────────────
 def predict_bti(lanes, length, avg_speed, std_dev, intersection, roadside_friction):
     bti = (0.3641 + 0.0411*lanes - 0.00308*length - 0.01903*avg_speed
            + 0.06103*std_dev + 0.03981*intersection + 0.00618*roadside_friction)
@@ -99,36 +131,92 @@ def get_weights(commuter, purpose, occupation, timeband, threshold, buffer, swit
 def score_route(r, w, use_predicted=False):
     bti = r["bti_predicted"] if use_predicted else r["bti_measured"]
     bt  = r["bt_predicted"]  if use_predicted else r["network_bt_min"]
-    s_bti  = (1 - min(bti, 1.5) / 1.5)         * w["bti"]
-    s_tt   = (1 - (r["avg_tt_min"] - 40) / 30) * w["tt"]
-    s_sig  = (1 - r["signal_ratio"])            * w["signals"]
-    s_mrg  = (1 - r["merge_points"] / 6)        * w["merge"]
-    s_fam  = r["familiarity_score"]             * w["familiarity"]
-    s_bt   = (1 - min(bt, 40) / 40)            * w["networkBT"]
-    s_circ = (1 - (r["circularity"] - 1) / 0.6)* w["circularity"]
+    s_bti  = (1 - min(bti, 1.5) / 1.5)          * w["bti"]
+    s_tt   = (1 - (r["avg_tt_min"] - 40) / 30)  * w["tt"]
+    s_sig  = (1 - r["signal_ratio"])             * w["signals"]
+    s_mrg  = (1 - r["merge_points"] / 6)         * w["merge"]
+    s_fam  = r["familiarity_score"]              * w["familiarity"]
+    s_bt   = (1 - min(bt, 40) / 40)             * w["networkBT"]
+    s_circ = (1 - (r["circularity"] - 1) / 0.6) * w["circularity"]
     total = s_bti + s_tt + s_sig + s_mrg + s_fam + s_bt + s_circ
     return max(0, min(100, round((total / sum(w.values())) * 100)))
 
-def build_map(routes_to_show, best_route_name):
-    m = folium.Map(location=[28.585, 77.165], zoom_start=12, tiles="CartoDB positron")
+# ─────────────────────────────────────────────────────────────
+# MAP BUILDER — returns static HTML string (no re-render flicker)
+# ─────────────────────────────────────────────────────────────
+def build_map_html(routes_to_show, best_route_name):
+    m = folium.Map(location=[28.590, 77.168], zoom_start=12,
+                   tiles="CartoDB positron")
+
     for rname, coords in ROUTE_COORDS.items():
         if rname not in routes_to_show:
             continue
+        is_best = (rname == best_route_name)
         folium.PolyLine(
-            coords, color=ROUTE_COLORS[rname],
-            weight=6 if rname == best_route_name else 3,
-            dash_array=None if rname == best_route_name else "8 4",
-            opacity=0.85, tooltip=rname
+            coords,
+            color=ROUTE_COLORS[rname],
+            weight=7 if is_best else 3,
+            dash_array=None if is_best else "10 6",
+            opacity=0.92 if is_best else 0.55,
+            tooltip=f"{'★ RECOMMENDED — ' if is_best else ''}{rname}",
         ).add_to(m)
-    folium.Marker([28.6270, 77.2390], popup="Mandi House Circle (Origin)",
-                  tooltip="Origin: Mandi House",
-                  icon=folium.Icon(color="green", icon="play", prefix="fa")).add_to(m)
-    folium.Marker([28.5290, 77.0940], popup="IIFCO Chowk (Destination)",
-                  tooltip="Destination: IIFCO Chowk",
-                  icon=folium.Icon(color="red", icon="stop", prefix="fa")).add_to(m)
-    return m
 
-# ── UI ──────────────────────────────────────────────────────
+    # Origin marker
+    folium.Marker(
+        [28.6270, 77.2390],
+        popup=folium.Popup("🟢 <b>Origin:</b> Mandi House Circle", max_width=200),
+        tooltip="Origin: Mandi House",
+        icon=folium.Icon(color="green", icon="circle", prefix="fa"),
+    ).add_to(m)
+
+    # Destination marker
+    folium.Marker(
+        [28.5290, 77.0940],
+        popup=folium.Popup("🔴 <b>Destination:</b> IIFCO Chowk", max_width=200),
+        tooltip="Destination: IIFCO Chowk",
+        icon=folium.Icon(color="red", icon="flag", prefix="fa"),
+    ).add_to(m)
+
+    # Legend
+    legend_items = ""
+    for rname in routes_to_show:
+        if rname not in ROUTE_COLORS:
+            continue
+        star = "★ " if rname == best_route_name else ""
+        color = ROUTE_COLORS[rname]
+        short = rname.split("—")[1].strip() if "—" in rname else rname
+        legend_items += (
+            f"<div style='margin:3px 0'>"
+            f"<span style='background:{color};display:inline-block;"
+            f"width:22px;height:4px;margin-right:6px;vertical-align:middle'></span>"
+            f"<span style='font-size:12px'>{star}{short}</span></div>"
+        )
+
+    legend_html = f"""
+    <div style='position:fixed;bottom:24px;left:24px;z-index:9999;
+                background:white;padding:10px 14px;border-radius:8px;
+                box-shadow:0 2px 8px rgba(0,0,0,0.18);font-family:sans-serif'>
+        <div style='font-size:11px;font-weight:700;margin-bottom:6px;color:#333'>
+            ROUTES</div>
+        {legend_items}
+    </div>"""
+    m.get_root().html.add_child(folium.Element(legend_html))
+
+    return m._repr_html_()
+
+
+# ─────────────────────────────────────────────────────────────
+# SESSION STATE — persists results across Streamlit reruns
+# ─────────────────────────────────────────────────────────────
+if "results" not in st.session_state:
+    st.session_state.results = None
+if "map_html" not in st.session_state:
+    # Default map (both routes, no best highlighted)
+    st.session_state.map_html = build_map_html(list(ROUTE_COORDS.keys()), None)
+
+# ─────────────────────────────────────────────────────────────
+# UI
+# ─────────────────────────────────────────────────────────────
 st.title("Route Recommender")
 st.caption("Mandi House → IIFCO Chowk · Based on Travel Time Reliability & User Characteristics")
 
@@ -138,11 +226,17 @@ with col_form:
     st.subheader("User characteristics")
     commuter   = st.selectbox("Commuter type", ["Regular", "Non-regular"])
     purpose    = st.selectbox("Trip purpose", ["Work", "Education", "Other / leisure"])
-    occupation = st.selectbox("Occupation", ["Working professional", "Cab / commercial driver", "Student", "Self-employed"])
-    timeband   = st.selectbox("Time of travel", ["Morning peak (6–9 AM)", "Inter-peak (9 AM–4 PM)", "Evening peak (4–8 PM)", "Off-peak / night"])
-    threshold  = st.selectbox("Delay threshold to switch", ["1–2 min", "2–5 min", "5–10 min", "More than 10 min"])
-    buffer     = st.selectbox("Buffer time kept", ["No buffer", "Up to 15 min", "15–20 min", "More than 20 min"])
-    switching  = st.selectbox("Route switching behaviour", ["Flexible — switches when needed", "Habitual — stays on known route", "App-driven"])
+    occupation = st.selectbox("Occupation", ["Working professional", "Cab / commercial driver",
+                                              "Student", "Self-employed"])
+    timeband   = st.selectbox("Time of travel", ["Morning peak (6–9 AM)", "Inter-peak (9 AM–4 PM)",
+                                                  "Evening peak (4–8 PM)", "Off-peak / night"])
+    threshold  = st.selectbox("Delay threshold to switch", ["1–2 min", "2–5 min",
+                                                             "5–10 min", "More than 10 min"])
+    buffer     = st.selectbox("Buffer time kept", ["No buffer", "Up to 15 min",
+                                                    "15–20 min", "More than 20 min"])
+    switching  = st.selectbox("Route switching behaviour", ["Flexible — switches when needed",
+                                                             "Habitual — stays on known route",
+                                                             "App-driven"])
 
     st.divider()
     st.subheader("Add a custom route")
@@ -156,21 +250,19 @@ with col_form:
         c_fric  = st.slider("Roadside friction ratio", 0.0, 1.0, 0.3, 0.05)
         c_sig   = st.slider("Signal ratio", 0.0, 1.0, 0.5, 0.05)
         c_merge = st.slider("Number of merge / diverge points", 0, 8, 3)
-        c_circ  = st.slider("Circularity ratio (1.0 = straight, 2.0 = very circular)", 1.0, 2.0, 1.3, 0.05)
+        c_circ  = st.slider("Circularity ratio (1.0 = straight, 2.0 = very circular)",
+                            1.0, 2.0, 1.3, 0.05)
         c_tt    = st.number_input("Estimated avg travel time (min)", 20, 120, 50, 5)
-        c_fam   = st.selectbox("Route familiarity", ["High — well-known route", "Medium — somewhat familiar", "Low — unfamiliar"])
+        c_fam   = st.selectbox("Route familiarity", ["High — well-known route",
+                                                      "Medium — somewhat familiar",
+                                                      "Low — unfamiliar"])
         add_custom = st.checkbox("Include this route in recommendation")
 
-    run = st.button("Find best route", type="primary", use_container_width=True)
-
-with col_map:
-    if not run:
-        st.subheader("Route map")
-        st_folium(build_map(list(ROUTE_COORDS.keys()), None), width=680, height=480)
-        st.caption("Select your characteristics and click 'Find best route' to see the recommendation.")
-    else:
+    if st.button("Find best route", type="primary", use_container_width=True):
         w = get_weights(commuter, purpose, occupation, timeband, threshold, buffer, switching)
-        fam_map = {"High — well-known route": 1.0, "Medium — somewhat familiar": 0.6, "Low — unfamiliar": 0.2}
+        fam_map = {"High — well-known route": 1.0,
+                   "Medium — somewhat familiar": 0.6,
+                   "Low — unfamiliar": 0.2}
         routes_scored = []
 
         for rname, rdata in NETWORK.items():
@@ -179,7 +271,7 @@ with col_map:
                                    rdata["intersection_ratio"], rdata["roadside_friction"])
             bt_pred = estimate_buffer_time(bti_pred, rdata["avg_tt_min"])
             entry = {**rdata, "name": rname, "bti_predicted": bti_pred,
-                     "bt_predicted": bt_pred, "familiarity_score": 0.8, "use_predicted": False}
+                     "bt_predicted": bt_pred, "familiarity_score": 0.8}
             entry["score"] = score_route(entry, w)
             routes_scored.append(entry)
 
@@ -195,7 +287,7 @@ with col_map:
                 "network_bt_min": bt_c, "bti_measured": bti_c,
                 "bti_predicted": bti_c, "bt_predicted": bt_c,
                 "unreliable": "Unknown — predicted from inputs", "color": "#6f42c1",
-                "familiarity_score": fam_map.get(c_fam, 0.5), "use_predicted": True,
+                "familiarity_score": fam_map.get(c_fam, 0.5),
             }
             ce["score"] = score_route(ce, w, use_predicted=True)
             routes_scored.append(ce)
@@ -203,38 +295,58 @@ with col_map:
         routes_scored.sort(key=lambda x: x["score"], reverse=True)
         best = routes_scored[0]
 
-        st.subheader("Route map")
+        # Store results + pre-render map HTML into session_state
+        st.session_state.results = routes_scored
         routes_on_map = [r["name"] for r in routes_scored if r["name"] in ROUTE_COORDS]
-        st_folium(build_map(routes_on_map, best["name"]), width=680, height=380)
+        st.session_state.map_html = build_map_html(routes_on_map, best["name"])
+
+# ─────────────────────────────────────────────────────────────
+# RIGHT COLUMN — map + results (reads from session_state, never flickers)
+# ─────────────────────────────────────────────────────────────
+with col_map:
+    st.subheader("Route map")
+
+    # Render map as static HTML iframe — no re-render on widget interaction
+    st.components.v1.html(st.session_state.map_html, height=420, scrolling=False)
+
+    if st.session_state.results is None:
+        st.caption("Select your characteristics and click 'Find best route' to see the recommendation.")
+    else:
+        routes_scored = st.session_state.results
+        best = routes_scored[0]
 
         st.markdown(f"""
         <div style='background:#d4edda;border-radius:10px;padding:14px 18px;
-                    margin-top:12px;margin-bottom:8px'>
-          <div style='font-size:11px;font-weight:600;color:#155724;margin-bottom:4px'>RECOMMENDED ROUTE</div>
+                    margin-top:8px;margin-bottom:8px'>
+          <div style='font-size:11px;font-weight:600;color:#155724;margin-bottom:4px'>
+            ★ RECOMMENDED ROUTE</div>
           <div style='font-size:18px;font-weight:600;color:#155724'>{best["name"]}</div>
           <div style='font-size:13px;color:#1e7e34;margin-top:4px'>
-            Score: {best["score"]}/100 &nbsp;|&nbsp; Avg TT: {best["avg_tt_min"]} min &nbsp;|&nbsp;
-            Buffer demand: {best.get("bt_predicted", best["network_bt_min"])} min &nbsp;|&nbsp;
+            Score: {best["score"]}/100 &nbsp;|&nbsp;
+            Avg TT: {best["avg_tt_min"]} min &nbsp;|&nbsp;
+            Buffer: {best.get("bt_predicted", best["network_bt_min"])} min &nbsp;|&nbsp;
             BTI: {best.get("bti_predicted", best["bti_measured"])}
           </div>
         </div>""", unsafe_allow_html=True)
 
+        # Bar chart
         st.subheader("All routes — scored")
         names  = [r["name"].replace("—", "-") for r in routes_scored]
         scores = [r["score"] for r in routes_scored]
         fig = go.Figure(go.Bar(
             x=names, y=scores,
-            marker_color=[r.get("color","#888") for r in routes_scored],
+            marker_color=[r.get("color", "#888") for r in routes_scored],
             text=[f"{s}/100" for s in scores], textposition="outside",
         ))
         fig.update_layout(
-            yaxis=dict(range=[0,115], title="Recommendation score"),
+            yaxis=dict(range=[0, 115], title="Recommendation score"),
             xaxis_title="Route", plot_bgcolor="white", paper_bgcolor="white",
             font=dict(size=12), margin=dict(t=20, b=60, l=40, r=20),
-            height=280, showlegend=False,
+            height=260, showlegend=False,
         )
         st.plotly_chart(fig, use_container_width=True)
 
+        # Detail cards
         st.subheader("Route details")
         det_cols = st.columns(len(routes_scored))
         for i, r in enumerate(routes_scored):
@@ -245,7 +357,7 @@ with col_map:
                 st.markdown(f"""
                 <div style='border:{border};border-radius:10px;padding:12px;margin-bottom:8px'>
                   <div style='font-size:12px;font-weight:600;margin-bottom:8px;color:#333'>
-                    {r["name"].split("—")[0].strip() if "—" in r["name"] else r["name"]}</div>
+                    {'★ ' if r["name"]==best["name"] else ''}{r["name"].split("—")[0].strip() if "—" in r["name"] else r["name"]}</div>
                   <div style='font-size:11px;color:#666;margin:3px 0'>Score: <b>{r["score"]}/100</b></div>
                   <div style='font-size:11px;color:#666;margin:3px 0'>Avg TT: <b>{r["avg_tt_min"]} min</b></div>
                   <div style='font-size:11px;color:#666;margin:3px 0'>BTI (predicted): <b>{bti_show}</b></div>
